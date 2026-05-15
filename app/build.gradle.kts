@@ -44,6 +44,7 @@ android {
 }
 
 dependencies {
+    implementation("io.coil-kt:coil-compose:2.6.0")
     implementation("androidx.navigation:navigation-compose:2.8.9")  // Обновите версию
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")  // Стабильная версия
 

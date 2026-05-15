@@ -46,7 +46,8 @@ data class ProfileResponse(
     val lastName: String,
     val patronymic: String?,
     val email: String,
-    val userId: Int
+    val userId: Int,
+    val bonusBalance: Int = 0
 )
 
 @Serializable

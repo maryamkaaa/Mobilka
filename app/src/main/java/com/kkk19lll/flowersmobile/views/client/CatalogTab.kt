@@ -39,11 +39,13 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.TabRowDefaults
@@ -77,6 +79,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.kkk19lll.flowersmobile.ui.theme.SoftPink
 import com.kkk19lll.flowersmobile.ui.theme.SoftPinkDark
 import com.kkk19lll.flowersmobile.ui.theme.TextPrimary
@@ -114,7 +117,9 @@ data class Product(
     val description: String?,
     val price: Double,
     val category: String,
-    val status: String
+    val status: String,
+    val readyQuantity: Int = 0,
+    val discountPercent: Int = 0
 )
 
 @Serializable
@@ -127,7 +132,9 @@ data class ProductDetail(
     val category: String,
     val status: String,
     val categoryId: Int,
-    val categoryName: String
+    val categoryName: String,
+    val readyQuantity: Int = 0,
+    val discountPercent: Int = 0
 )
 
 @Serializable
@@ -592,6 +599,7 @@ fun CatalogTab() {
     var showPreview by remember { mutableStateOf(false) }
     var showCart by remember { mutableStateOf(false) }
     var showOrderForm by remember { mutableStateOf(false) }
+    var showAiBottomSheet by remember { mutableStateOf(false) } // Переменная ИИ-шторки
 
     LaunchedEffect(Unit) {
         loadCategories(catalogState, snackbarHostState)
@@ -660,20 +668,6 @@ fun CatalogTab() {
                             ),
                             actions = {
                                 IconButton(
-                                    onClick = {
-                                        if (constructorState.previewData != null) {
-                                            showPreview = true
-                                        }
-                                    },
-                                    enabled = constructorState.previewData != null
-                                ) {
-                                    Text(
-                                        text = "👁️",
-                                        fontSize = 24.sp,
-                                        color = if (constructorState.previewData != null) SoftPink else WarmGray
-                                    )
-                                }
-                                IconButton(
                                     onClick = { showCart = true }
                                 ) {
                                     BadgedBox(
@@ -693,31 +687,7 @@ fun CatalogTab() {
                 }
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
-            floatingActionButton = {
-                if (selectedTab == 1 && constructorState.previewData != null) {
-                    FloatingActionButton(
-                        onClick = {
-                            showOrderForm = true
-                        },
-                        containerColor = SoftPink,
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text("📝", fontSize = 20.sp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = "Заказать",
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                }
-            }
+            floatingActionButton = {} // УБРАЛИ ПЛАВАЮЩУЮ КНОПКУ "ЗАКАЗАТЬ", ТЕПЕРЬ ОНА ВНИЗУ!
         ) { paddingValues ->
             Column(
                 modifier = Modifier
@@ -891,129 +861,177 @@ fun CatalogTab() {
                                     }
                                 }
 
-                                when (constructorState.currentTab) {
-                                    0 -> PackagingList(
-                                        packaging = constructorState.availablePackaging,
-                                        selectedId = constructorState.selectedPackaging,
-                                        onSelect = { packagingId ->
-                                            constructorState.selectedPackaging = packagingId
-                                        }
-                                    )
-                                    1 -> FlowersList(
-                                        flowers = constructorState.availableFlowers,
-                                        selectedFlowers = constructorState.selectedFlowers,
-                                        onAdd = { flowerId ->
-                                            val existing = constructorState.selectedFlowers.find { it.idRawName == flowerId }
-                                            val flower = constructorState.availableFlowers.find { it.idRawName == flowerId }
-                                            if (existing != null) {
-                                                if (existing.quantity < (flower?.quantity ?: 0)) {
-                                                    existing.quantity++
-                                                } else {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar("⚠️ Недостаточно товара на складе")
-                                                    }
-                                                }
-                                            } else {
-                                                if (flower != null && flower.quantity > 0) {
-                                                    constructorState.selectedFlowers.add(BouquetItem(flowerId, 1))
-                                                } else {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar("⚠️ Товар временно отсутствует")
-                                                    }
-                                                }
+                                // СПИСКИ ОСТАЮТСЯ СВЕРХУ И НЕ ВЫТАЛКИВАЮТ НИЗ
+                                Box(modifier = Modifier.weight(1f)) {
+                                    when (constructorState.currentTab) {
+                                        0 -> PackagingList(
+                                            packaging = constructorState.availablePackaging,
+                                            selectedId = constructorState.selectedPackaging,
+                                            onSelect = { packagingId ->
+                                                constructorState.selectedPackaging = packagingId
                                             }
-                                        },
-                                        onRemove = { flowerId ->
-                                            val existing = constructorState.selectedFlowers.find { it.idRawName == flowerId }
-                                            if (existing != null) {
-                                                if (existing.quantity > 1) {
-                                                    existing.quantity--
+                                        )
+                                        1 -> FlowersList(
+                                            flowers = constructorState.availableFlowers,
+                                            selectedFlowers = constructorState.selectedFlowers,
+                                            onAdd = { flowerId ->
+                                                val existing = constructorState.selectedFlowers.find { it.idRawName == flowerId }
+                                                val flower = constructorState.availableFlowers.find { it.idRawName == flowerId }
+                                                if (existing != null) {
+                                                    if (existing.quantity < (flower?.quantity ?: 0)) {
+                                                        existing.quantity++
+                                                    } else {
+                                                        coroutineScope.launch {
+                                                            snackbarHostState.showSnackbar("⚠️ Недостаточно товара на складе")
+                                                        }
+                                                    }
                                                 } else {
-                                                    constructorState.selectedFlowers.remove(existing)
-                                                }
-                                            }
-                                        },
-                                        onQuantityChange = { flowerId, quantity ->
-                                            val existing = constructorState.selectedFlowers.find { it.idRawName == flowerId }
-                                            val flower = constructorState.availableFlowers.find { it.idRawName == flowerId }
-                                            if (existing != null && flower != null) {
-                                                val validQuantity = quantity.coerceIn(1, flower.quantity)
-                                                existing.quantity = validQuantity
-                                                if (quantity != validQuantity) {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar("⚠️ Доступно только ${flower.quantity} шт")
+                                                    if (flower != null && flower.quantity > 0) {
+                                                        constructorState.selectedFlowers.add(BouquetItem(flowerId, 1))
+                                                    } else {
+                                                        coroutineScope.launch {
+                                                            snackbarHostState.showSnackbar("⚠️ Товар временно отсутствует")
+                                                        }
                                                     }
                                                 }
-                                            }
-                                        }
-                                    )
-                                    2 -> ExtrasList(
-                                        extras = constructorState.availableExtras,
-                                        selectedExtras = constructorState.selectedExtras,
-                                        onAdd = { extraId ->
-                                            val existing = constructorState.selectedExtras.find { it.idRawName == extraId }
-                                            val extra = constructorState.availableExtras.find { it.idRawName == extraId }
-                                            if (existing != null) {
-                                                if (existing.quantity < (extra?.quantity ?: 0)) {
-                                                    existing.quantity++
-                                                } else {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar("⚠️ Недостаточно товара на складе")
+                                            },
+                                            onRemove = { flowerId ->
+                                                val existing = constructorState.selectedFlowers.find { it.idRawName == flowerId }
+                                                if (existing != null) {
+                                                    if (existing.quantity > 1) {
+                                                        existing.quantity--
+                                                    } else {
+                                                        constructorState.selectedFlowers.remove(existing)
                                                     }
                                                 }
-                                            } else {
-                                                if (extra != null && extra.quantity > 0) {
-                                                    constructorState.selectedExtras.add(BouquetItem(extraId, 1))
-                                                } else {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar("⚠️ Товар временно отсутствует")
+                                            },
+                                            onQuantityChange = { flowerId, quantity ->
+                                                val existing = constructorState.selectedFlowers.find { it.idRawName == flowerId }
+                                                val flower = constructorState.availableFlowers.find { it.idRawName == flowerId }
+                                                if (existing != null && flower != null) {
+                                                    val validQuantity = quantity.coerceIn(1, flower.quantity)
+                                                    existing.quantity = validQuantity
+                                                    if (quantity != validQuantity) {
+                                                        coroutineScope.launch {
+                                                            snackbarHostState.showSnackbar("⚠️ Доступно только ${flower.quantity} шт")
+                                                        }
                                                     }
                                                 }
                                             }
-                                        },
-                                        onRemove = { extraId ->
-                                            val existing = constructorState.selectedExtras.find { it.idRawName == extraId }
-                                            if (existing != null) {
-                                                if (existing.quantity > 1) {
-                                                    existing.quantity--
+                                        )
+                                        2 -> ExtrasList(
+                                            extras = constructorState.availableExtras,
+                                            selectedExtras = constructorState.selectedExtras,
+                                            onAdd = { extraId ->
+                                                val existing = constructorState.selectedExtras.find { it.idRawName == extraId }
+                                                val extra = constructorState.availableExtras.find { it.idRawName == extraId }
+                                                if (existing != null) {
+                                                    if (existing.quantity < (extra?.quantity ?: 0)) {
+                                                        existing.quantity++
+                                                    } else {
+                                                        coroutineScope.launch {
+                                                            snackbarHostState.showSnackbar("⚠️ Недостаточно товара на складе")
+                                                        }
+                                                    }
                                                 } else {
-                                                    constructorState.selectedExtras.remove(existing)
+                                                    if (extra != null && extra.quantity > 0) {
+                                                        constructorState.selectedExtras.add(BouquetItem(extraId, 1))
+                                                    } else {
+                                                        coroutineScope.launch {
+                                                            snackbarHostState.showSnackbar("⚠️ Товар временно отсутствует")
+                                                        }
+                                                    }
                                                 }
-                                            }
-                                        },
-                                        onQuantityChange = { extraId, quantity ->
-                                            val existing = constructorState.selectedExtras.find { it.idRawName == extraId }
-                                            val extra = constructorState.availableExtras.find { it.idRawName == extraId }
-                                            if (existing != null && extra != null) {
-                                                val validQuantity = quantity.coerceIn(1, extra.quantity)
-                                                existing.quantity = validQuantity
-                                                if (quantity != validQuantity) {
-                                                    coroutineScope.launch {
-                                                        snackbarHostState.showSnackbar("⚠️ Доступно только ${extra.quantity} шт")
+                                            },
+                                            onRemove = { extraId ->
+                                                val existing = constructorState.selectedExtras.find { it.idRawName == extraId }
+                                                if (existing != null) {
+                                                    if (existing.quantity > 1) {
+                                                        existing.quantity--
+                                                    } else {
+                                                        constructorState.selectedExtras.remove(existing)
+                                                    }
+                                                }
+                                            },
+                                            onQuantityChange = { extraId, quantity ->
+                                                val existing = constructorState.selectedExtras.find { it.idRawName == extraId }
+                                                val extra = constructorState.availableExtras.find { it.idRawName == extraId }
+                                                if (existing != null && extra != null) {
+                                                    val validQuantity = quantity.coerceIn(1, extra.quantity)
+                                                    existing.quantity = validQuantity
+                                                    if (quantity != validQuantity) {
+                                                        coroutineScope.launch {
+                                                            snackbarHostState.showSnackbar("⚠️ Доступно только ${extra.quantity} шт")
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
-                                    )
-                                }
-
-                                if (constructorState.isCalculating) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(32.dp),
-                                            color = SoftPink
                                         )
                                     }
-                                } else if (constructorState.previewData != null) {
-                                    CurrentPriceCard(
-                                        totalPrice = constructorState.previewData!!.totalPrice,
-                                        itemsCount = constructorState.selectedFlowers.size + constructorState.selectedExtras.size + (if (constructorState.selectedPackaging != null) 1 else 0)
-                                    )
+                                }
+
+                                // --- НОВАЯ КОМПАКТНАЯ НИЖНЯЯ ПАНЕЛЬ ---
+                                if (constructorState.isCalculating || constructorState.previewData != null) {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shadowElevation = 8.dp,
+                                        color = Color.White
+                                    ) {
+                                        if (constructorState.isCalculating) {
+                                            Box(
+                                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                CircularProgressIndicator(modifier = Modifier.size(32.dp), color = SoftPink)
+                                            }
+                                        } else if (constructorState.previewData != null) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text("Итого:", fontSize = 12.sp, color = WarmGray)
+                                                    Text(
+                                                        text = String.format("%.0f ₽", constructorState.previewData!!.totalPrice),
+                                                        fontSize = 20.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = SoftPinkDark
+                                                    )
+                                                }
+
+                                                Row(
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Button(
+                                                        onClick = { showAiBottomSheet = true },
+                                                        shape = RoundedCornerShape(12.dp),
+                                                        // --- СДЕЛАЛИ КНОПКУ ЯРКОЙ ---
+                                                        colors = ButtonDefaults.buttonColors(
+                                                            containerColor = SoftPinkDark,
+                                                            contentColor = Color.White
+                                                        ),
+                                                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                                                    ) {
+                                                        Text("🤖 Предосмотр", fontWeight = FontWeight.Medium)
+                                                    }
+
+                                                    Button(
+                                                        onClick = { showOrderForm = true },
+                                                        shape = RoundedCornerShape(12.dp),
+                                                        colors = ButtonDefaults.buttonColors(containerColor = SoftPink),
+                                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                                    ) {
+                                                        Text("Заказать", color = Color.White, fontWeight = FontWeight.Medium)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1049,14 +1067,16 @@ fun CatalogTab() {
                 )
             }
 
-            if (showPreview && constructorState.previewData != null) {
-                BouquetPreviewBottomSheet(
-                    preview = constructorState.previewData!!,
-                    onDismiss = { showPreview = false },
-                    onOrderClick = {
-                        showPreview = false
-                        showOrderForm = true
-                    }
+            // ВЫЗОВ ШТОРКИ ИИ
+            if (showAiBottomSheet && constructorState.previewData != null) {
+                val aiIngredientsList = mutableListOf<String>()
+                constructorState.availablePackaging.find { it.idRawName == constructorState.selectedPackaging }?.let { pack -> aiIngredientsList.add(pack.rawName) }
+                constructorState.selectedFlowers.forEach { selected -> constructorState.availableFlowers.find { it.idRawName == selected.idRawName }?.let { flower -> aiIngredientsList.add("${flower.rawName} ${selected.quantity} шт") } }
+                constructorState.selectedExtras.forEach { selected -> constructorState.availableExtras.find { it.idRawName == selected.idRawName }?.let { extra -> aiIngredientsList.add("${extra.rawName} ${selected.quantity} шт") } }
+
+                AiPreviewBottomSheet(
+                    ingredients = aiIngredientsList,
+                    onDismiss = { showAiBottomSheet = false }
                 )
             }
 
@@ -1369,7 +1389,6 @@ fun ProductsGrid(
         }
     }
 }
-
 @Composable
 fun ProductCard(
     product: Product,
@@ -1399,25 +1418,54 @@ fun ProductCard(
                         )
                     )
             ) {
-                val flowerEmoji = getFlowerEmoji(product.name)
-                Text(
-                    text = flowerEmoji,
-                    fontSize = 64.sp,
-                    modifier = Modifier.align(Alignment.Center)
-                )
+                // Если есть фото из БД, показываем его. Если нет - эмодзи.
+                if (!product.photo.isNullOrBlank()) {
+                    AsyncImage(
+                        model = product.photo,
+                        contentDescription = product.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                } else {
+                    val flowerEmoji = getFlowerEmoji(product.name)
+                    Text(
+                        text = flowerEmoji,
+                        fontSize = 64.sp,
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                }
 
+                // Ярлычок скидки в левом верхнем углу
+                if (product.discountPercent > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .background(Color(0xFFE53935), RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = "-${product.discountPercent}%",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Кнопка избранного в правом верхнем углу
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(12.dp)
-                        .size(36.dp)
-                        .background(Color.White, CircleShape)
+                        .padding(8.dp)
+                        .size(32.dp)
+                        .background(Color.White.copy(alpha = 0.8f), CircleShape)
                         .clickable { isFavorite = !isFavorite },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = if (isFavorite) "❤️" else "🤍",
-                        fontSize = 20.sp
+                        fontSize = 18.sp
                     )
                 }
             }
@@ -1436,12 +1484,32 @@ fun ProductCard(
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                Text(
-                    text = String.format("%.0f ₽", product.price),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = SoftPinkDark
-                )
+                // Логика отображения цены со скидкой
+                if (product.discountPercent > 0) {
+                    val discountedPrice = product.price * (1 - product.discountPercent / 100.0)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = String.format("%.0f ₽", discountedPrice),
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE53935) // Красная цена
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = String.format("%.0f ₽", product.price),
+                            fontSize = 14.sp,
+                            color = WarmGray,
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
+                        )
+                    }
+                } else {
+                    Text(
+                        text = String.format("%.0f ₽", product.price),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SoftPinkDark
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -2820,6 +2888,7 @@ fun ExtraItem(
     }
 }
 
+// ЭТУ ФУНКЦИЮ МЫ БОЛЬШЕ НЕ ИСПОЛЬЗУЕМ В КОНСТРУКТОРЕ, НО Я ЕЁ ОСТАВИЛ ЧТОБЫ НИЧЕГО НЕ СЛОМАТЬ
 @Composable
 fun CurrentPriceCard(
     totalPrice: Double,
@@ -3525,6 +3594,157 @@ suspend fun createOrderFromBouquet(
         Log.e("OrderCreation", "Error creating bouquet order", e)
         withContext(Dispatchers.Main) {
             snackbarHostState.showSnackbar("❌ Ошибка: ${e.message}")
+        }
+    }
+}
+// ==================== ИИ-ВИЗУАЛИЗАЦИЯ ====================
+
+@Serializable
+data class AiBouquetRequest(val ingredients: List<String>)
+
+@Serializable
+data class AiPreviewResponse(val message: String, val imageUrl: String)
+
+object AiGeneratorApiService {
+    private const val BASE_URL = "http://10.0.2.2:5034/api/AiGenerator"
+    private val json = Json { ignoreUnknownKeys = true }
+
+    suspend fun generatePreview(ingredients: List<String>): String? = withContext(Dispatchers.IO) {
+        var connection: HttpURLConnection? = null
+        try {
+            val url = URL("$BASE_URL/generate-preview")
+            connection = url.openConnection() as HttpURLConnection
+            connection.apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("Accept", "application/json")
+                doOutput = true
+                connectTimeout = 15000
+                readTimeout = 15000
+            }
+
+            val request = AiBouquetRequest(ingredients)
+            val jsonBody = json.encodeToString(request)
+
+            connection.outputStream.use { os ->
+                OutputStreamWriter(os, "UTF-8").apply {
+                    write(jsonBody)
+                    flush()
+                }
+            }
+
+            if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                val response = connection.inputStream.bufferedReader().use { it.readText() }
+                val parsedResponse = json.decodeFromString<AiPreviewResponse>(response)
+                return@withContext parsedResponse.imageUrl
+            } else {
+                Log.e("AiGenerator", "Error code: ${connection.responseCode}")
+                return@withContext null
+            }
+        } catch (e: Exception) {
+            Log.e("AiGenerator", "Network error", e)
+            return@withContext null
+        } finally {
+            connection?.disconnect()
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AiPreviewBottomSheet(
+    ingredients: List<String>,
+    onDismiss: () -> Unit
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val coroutineScope = rememberCoroutineScope()
+    var imageUrl by remember { mutableStateOf<String?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+
+    // Нейросеть начинает рисовать сразу, как только открылась шторка
+    LaunchedEffect(Unit) {
+        imageUrl = AiGeneratorApiService.generatePreview(ingredients)
+        isLoading = false
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = Color.White
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "✨ ИИ-Визуализация",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = TextPrimary
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(280.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SoftPink.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isLoading) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator(color = SoftPink)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("ИИ собирает букет...", color = WarmGray, fontSize = 12.sp)
+                    }
+                } else if (!imageUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = imageUrl,
+                        contentDescription = "Превью",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = androidx.compose.ui.layout.ContentScale.Crop
+                    )
+                } else {
+                    Text("Не удалось сгенерировать 😔", color = WarmGray)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        isLoading = true
+                        coroutineScope.launch {
+                            imageUrl = AiGeneratorApiService.generatePreview(ingredients)
+                            isLoading = false
+                        }
+                    },
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = !isLoading
+                ) {
+                    Text("🔄 Переделать", color = TextPrimary)
+                }
+
+                Button(
+                    onClick = onDismiss,
+                    modifier = Modifier.weight(1f).height(50.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = SoftPink)
+                ) {
+                    Text("✅ Отлично")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
         }
     }
 }

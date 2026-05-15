@@ -53,7 +53,10 @@ data class Order(
     val deliveryMethod: String,
     val paymentMethod: String,
     val completedPhoto: String?,
-    val floristName: String?
+    val floristName: String?,
+    val floristPhoto: String? = null,
+    val bonusesUsed: Int = 0,
+    val bonusesAwarded: Int = 0
 )
 
 @Serializable
@@ -74,7 +77,10 @@ data class OrderDetail(
     val clientName: String,
     val clientPhone: String,
     val floristName: String?,
-    val courierName: String?
+    val courierName: String?,
+    val floristPhoto: String? = null,
+    val bonusesUsed: Int = 0,
+    val bonusesAwarded: Int = 0
 )
 
 @Serializable
